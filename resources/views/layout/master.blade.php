@@ -18,7 +18,7 @@
     <!-- Theme style -->
     <link rel="stylesheet" href="{{ asset('asset/css/dashboard.css') }}">
     <!-- overlayScrollbars -->
-    <link rel="stylesheet" href="{{ asset('asset/plugins/overlayScrollbars/css/OverlayScrollbars.min.css') }}">
+    {{-- <link rel="stylesheet" href="{{ asset('asset/plugins/overlayScrollbars/css/OverlayScrollbars.min.css') }}"> --}}
     <!-- Customized Main Css -->
     <link rel="stylesheet" href="{{ asset('asset/css/style.css') }}">
 </head>

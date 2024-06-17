@@ -14,7 +14,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="" target="_blanck">
+                    <a href="https://www.linkedin.com/in/assem-m-89a61414b" target="_blanck">
                         LinkedIn
                     </a>
                 </li>

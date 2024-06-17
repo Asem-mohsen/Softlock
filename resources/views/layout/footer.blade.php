@@ -21,7 +21,7 @@
                 </ul>
             </div>
             <div class="text-center text-white border-top border-white pt-2">
-                Copyright@ {{ \Carbon\Carbon::now()->toDateString() }} Softlock Task
+                Copyright@ {{ \Carbon\Carbon::now()->year }} Softlock Task
             </div>
         </div>
     </footer>
@@ -35,20 +35,10 @@
     </script>
     <!-- Bootstrap 4 -->
     <script src="{{ asset('asset/plugins/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
-    <!-- Sparkline -->
-    <script src="{{ asset('asset/plugins/sparklines/sparkline.js') }}"></script>
-    <!-- Tempusdominus Bootstrap 4 -->
-    <script src="{{ asset('asset/plugins/tempusdominus-bootstrap-4/js/tempusdominus-bootstrap-4.min.js') }}"></script>
-
     <!-- overlayScrollbars -->
     <script src="{{ asset('asset/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js') }}"></script>
-
     <!-- File Input -->
     <script src="{{ asset('asset/plugins/bs-custom-file-input/bs-custom-file-input.min.js') }}"></script>
-    <!-- AdminLTE App -->
-    <script src="{{ asset('asset/js/adminlte.js') }}"></script>
-    <!-- AdminLTE for demo purposes -->
-    <script src="{{ asset('asset/js/demo.js') }}"></script>
     <!-- Main JS -->
     <script src="{{ asset('asset/js/main.js') }}"></script>
 
