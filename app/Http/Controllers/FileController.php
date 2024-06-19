@@ -5,23 +5,60 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
+use Illuminate\Http\UploadedFile;
+
 
 class FileController extends Controller
 {
 
+    private function createTemporaryFile($filePath)
+    {
+        $tempFile = new UploadedFile(
+            $filePath,
+            pathinfo($filePath, PATHINFO_BASENAME),
+            mime_content_type($filePath),
+            null,
+            true
+        );
+
+        return $tempFile;
+    }
+
     public function showFile(Request $request)
     {
+        $tempFilePath = $request->input('tempFilePath');
+
+        if ($tempFilePath) {
+            $tempFile = $this->createTemporaryFile($tempFilePath);
+
+            $fileInfo = pathinfo($tempFile->getClientOriginalName());
+            $fileName = $fileInfo['filename'];
+            $fileSize = $tempFile->getSize();
+            $fileExtension = $tempFile->getClientOriginalExtension();
+
+            $fileType = $this->getFileType($fileExtension);
+            $preview = $this->getPreviewHtml($tempFilePath, $fileType, $fileName);
+
+            return response()->json([
+                'name' => $fileName,
+                'size' => number_format($fileSize / 1024, 2) . ' KB',
+                'extension' => $fileExtension,
+                'preview' => $preview,
+            ]);
+        }
         $file = $request->file('file');
         $content = $request->input('content');
-
         if ($file) {
             $fileInfo = pathinfo($file->getClientOriginalName());
             $fileName = $fileInfo['filename'];
             $fileSize = $file->getSize();
             $fileExtension = $file->getClientOriginalExtension();
 
+            $fileNameWithExtension = $fileName . '.' . $fileExtension;
+
             // to store the file in temp storage
-            $path     = $file->storeAs('temp', $fileName, 'public');
+            $path     = $file->storeAs('temp', $fileNameWithExtension, 'public');
 
             $fileType = $this->getFileType($fileExtension);
             $preview  = $this->getPreviewHtml($path, $fileType, $fileName);
@@ -57,6 +94,7 @@ class FileController extends Controller
     private function getPreviewHtml($path, $fileType, $fileName)
     {
         $storagePath = Storage::url($path);
+        $storagePathtext = storage_path('app/public/' . $path);
 
         switch ($fileType) {
             case 'image':
@@ -64,22 +102,25 @@ class FileController extends Controller
             case 'pdf':
                 return '<iframe src="' . $storagePath . '" width="100%" height="500px"></iframe>';
             case 'text':
-                $content = Storage::get($path);
-                if ($content === false) {
-                    return '<p>Error: Unable to read the file content.</p>';
+                if(file_exists($storagePathtext)){
+                    $content = file_get_contents($storagePathtext);
+                }else{
+                    $content = file_get_contents($path);
                 }
-                // Debug: Log or display the content
-                Log::info('Path: ' . $storagePath);
+                $limit = 1200;
+                if (strlen($content) > $limit) {
+                    $content = substr($content, 0, $limit) . '...';
+                }
                 return '<pre style="text-align: left;">' . htmlspecialchars($content) . '</pre>';
             default:
-                return '<img src="' . asset('images/file-icon.png') . '" alt="File Icon" width="100">';
+                return '<img src="' . asset('asset/images/file.png') . '" alt="File Icon" width="100">';
         }
     }
 
     public function encrypt(Request $request)
     {
         if ($request->hasFile('file')) {
-            $file = $request->file('file');
+            $file          = $request->file('file');
             $fileName      = $file->getClientOriginalName();
             $fileExtension = $file->getClientOriginalExtension();
             $fileContent   = file_get_contents($file->getRealPath());
@@ -92,7 +133,7 @@ class FileController extends Controller
 
             return response()->json([
                 'encryptedFileName' => "$fileName.encrypted.$fileExtension",
-                'encryptedContent'  => base64_encode($encryptedContent),
+                'encryptedContent'  =>  $encryptedData ,
                 'key'               => $key,
             ]);
         }
@@ -103,18 +144,26 @@ class FileController extends Controller
     public function decrypt(Request $request)
     {
         $encryptedContent = $request->input('encryptedContent');
-        $key = $request->input('key');
 
-        if ($encryptedContent && $key) {
-            Log::info('Encryptionkey: ' . $key);
-            Log::info('encryptedContent: ' . $encryptedContent);
-            $decryptedContent = $this->decryptData($encryptedContent, $key);
+        if ($encryptedContent) {
+            $decryptedContent = $this->decryptData($encryptedContent);
 
             if ($decryptedContent !== null) {
-                Log::info('decryptedContent: ' . $encryptedContent);
+
+                $tempPath = storage_path('app/temp');
+
+                // Create the 'temp' directory if it doesn't exist
+                if (!File::isDirectory($tempPath)) {
+                    File::makeDirectory($tempPath, 0755, true, true);
+                }
+
+                $tempFilePath = $tempPath . '/decrypted_file.txt';
+                file_put_contents($tempFilePath, $decryptedContent);
 
                 return response()->json([
-                    'decryptedContent' => base64_encode($decryptedContent),
+                    'success' => true,
+                    'message' => 'File decrypted successfully.',
+                    'tempFilePath' => $tempFilePath,
                 ]);
             } else {
                 return response()->json(['error' => 'Decryption failed. Make sure the file was encrypted before.'], 400);
@@ -130,33 +179,30 @@ class FileController extends Controller
 
         $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
 
-        $encryptedContent = 'KEY:' . base64_encode($key) . "\n" . $iv . $encrypted;
+        // Encode key and IV for easy storage and transmission
+        $encodedKey = base64_encode($key);
+        $encodedIv = base64_encode($iv);
+        $encodedEncryptedData = base64_encode($encrypted);
+        
+        $encryptedContent = 'KEY:' . $encodedKey . "\n" . 'IV:' . $encodedIv . "\n" . $encodedEncryptedData;
 
         return $encryptedContent;
 
     }
 
-    private function decryptData($encryptedContent, $key)
+    private function decryptData($encryptedContent)
     {
-        // $key = base64_decode($key);
-        // Log::info('decryptionkey: ' . $key);
-
-        // Split the encrypted content into two parts: the IV and the encrypted data
-        $iv = substr($encryptedContent, 0, openssl_cipher_iv_length('aes-256-cbc'));
-        Log::info('iv: ' . $iv);
-        $encrypted = substr($encryptedContent, openssl_cipher_iv_length('aes-256-cbc'));
-
-        Log::info('encrypted: ' . $encrypted);
+        // Split the encrypted content to extract the IV and encrypted data
+        $encryptedContentParts = explode("\n", $encryptedContent);
+        $key = base64_decode(str_replace('KEY:', '', $encryptedContentParts[0]));
+        $iv = base64_decode(trim(str_replace('IV:', '', $encryptedContentParts[1])));
+        $encrypted = base64_decode($encryptedContentParts[2]);
 
         // Decrypt the data using the provided key and IV
         $decrypted = openssl_decrypt($encrypted, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
 
-        Log::info('decrypted: ' . $decrypted);
-        if ($decrypted !== false) {
-            return $decrypted;
-        }
+        return $decrypted !== false ? $decrypted : null;
 
-        return null;
     }
 
 }

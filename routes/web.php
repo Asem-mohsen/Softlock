@@ -13,4 +13,3 @@ Route::controller(FileController::class)->group(function(){
     Route::post('/decrypt'     , 'decrypt' )->name('file.decrypt');
 });
 
-

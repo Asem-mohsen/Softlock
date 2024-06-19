@@ -1,20 +1,10 @@
-
 $(document).ready(function() {
 
     $('#saveEncryptedBtn').on('click', function() {
         var encryptedContent = $('#encryptedContentTextarea').val();
-        var key = $('#key').val();
-        var fileContent = `KEY: ${key}\n${encryptedContent}`;
-        var blob = new Blob([fileContent], { type: 'text/plain' });
+        var blob = new Blob([encryptedContent], { type: 'text/plain' });
 
         saveFileWithUserPrompt(blob, 'encrypted');
-    });
-
-    $('#saveDecryptedBtn').on('click', function() {
-        var decryptedContent = $('#decryptedContentTextarea').val();
-        var blob = new Blob([atob(decryptedContent)], { type: 'text/plain' });
-
-        promptForFileNameAndSave(blob, 'decrypted');
     });
 
     function saveFileWithUserPrompt(blob, fileType) {
@@ -57,13 +47,9 @@ $(document).ready(function() {
             writable.write(blob)
                 .then(() => writable.close())
                 .then(() => {
-                    alert(`File was saved as: ${handle.name}`);
+                    showAlert(`File was saved as: ${handle.name}`);
                 })
                 .catch(handleError);
-        }
-
-        function handleError(error) {
-            console.error(error);
         }
     }
 
@@ -89,19 +75,18 @@ $(document).ready(function() {
                     if (data.encryptedFileName) {
                         $('#encryptedFileName').text(data.encryptedFileName);
                         $('#encryptedContentTextarea').val(data.encryptedContent);
-                        $('#key').val(data.key);
                         $('#encryptedContent').show();
                         $('#decryptBtn').show();
                     } else {
-                        alert('Encryption failed: ' + data.error);
+                        showAlert('Encryption failed: ' + data.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    alert('An error occurred: ' + error);
+                    showAlert('An error occurred: ' + error);
                 }
             });
         } else {
-            alert('Please select a file to encrypt.');
+            showAlert('Please select a file to encrypt.');
         }
     }
 
@@ -122,12 +107,10 @@ $(document).ready(function() {
             if (isEncryptedFile(fileContent)) {
 
                 // already encrypted
-                extractKeyFromFile(fileContent);
                 showFileDetails(file, fileContent);
                 $('#decryptBtn').show();
             } else {
                 // not encrypted
-                extractKeyFromFile(fileContent);
                 showFileDetails(file, fileContent);
                 $('#decryptBtn').hide();
             }
@@ -138,48 +121,32 @@ $(document).ready(function() {
 
     function decryptFile() {
         const encryptedContent = $('#encryptedContentTextarea').val();
-        const key = $('#key').val();
 
-        if (encryptedContent && key) {
-            const formData = new FormData();
-            formData.append('encryptedContent', encryptedContent);
-            formData.append('key', key);
+        if (encryptedContent) {
+            const requestData = {
+                encryptedContent: encryptedContent
+            };
 
             $.ajax({
                 url: decryptRoute,
                 type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
+                data: JSON.stringify(requestData),
+                contentType: 'application/json',
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
                 success: function(data) {
-                    if (data.decryptedContent) {
-                        const decryptedContent = atob(data.decryptedContent);
-                        console.log(decryptedContent);
+                    if (data.success) {
+                        const tempFilePath = data.tempFilePath;
+                        showDecryptedFileDetails(tempFilePath);
                     } else {
-                        alert('Decryption failed: ' + data.error);
+                        showAlert(data.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    alert('An error occurred: ' + error);
+                    showAlert(error);
                 }
             });
-        }
-    }
-
-    function extractKeyFromFile(fileContent) {
-        const lines = fileContent.split(/\r?\n/);
-        console.log(lines);
-        var keyHeaderRegex = /^KEY:/;
-
-        if (lines.length >= 2) {
-            const key = lines[0];
-            $('#key').val(key);
-            const content = lines.slice(1).join('\n');
-        } else {
-            alert('Encryption key not found in the file content.');
         }
     }
 
@@ -208,10 +175,39 @@ $(document).ready(function() {
                 $('#detailsSection').show();
             },
             error: function(xhr, status, error) {
-                alert('An error occurred: ' + error);
+                showAlert('An error occurred: '. error);
             }
         });
     }
 
+    function showDecryptedFileDetails(tempFilePath) {
+        const requestData = {
+            tempFilePath: tempFilePath
+        };
+
+        $.ajax({
+            url: detailsRoute,
+            type: 'POST',
+            data: JSON.stringify(requestData),
+            contentType: 'application/json',
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(data) {
+                if (data.error) {
+                    showAlert(data.error);
+                } else {
+                    $('#fileName').text(data.name);
+                    $('#fileSize').text(data.size);
+                    $('#fileExtension').text(data.extension);
+                    $('#filePreview').html(data.preview);
+                    $('#detailsSection').show();
+                }
+            },
+            error: function(xhr, status, error) {
+                showAlert('An error occurred: '. error);
+            }
+        });
+    }
 });
 
