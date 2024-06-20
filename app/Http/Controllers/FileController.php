@@ -28,15 +28,12 @@ class FileController extends Controller
     public function showFile(Request $request)
     {
         $tempFilePath = $request->input('tempFilePath');
-
         if ($tempFilePath) {
-            $tempFile = $this->createTemporaryFile($tempFilePath);
 
-            $fileInfo = pathinfo($tempFile->getClientOriginalName());
+            $fileInfo = pathinfo($tempFilePath);
             $fileName = $fileInfo['filename'];
-            $fileSize = $tempFile->getSize();
-            $fileExtension = $tempFile->getClientOriginalExtension();
-
+            $fileSize =  filesize(public_path(str_replace(url('/'), '', $tempFilePath)));
+            $fileExtension = $fileInfo['extension'];
             $fileType = $this->getFileType($fileExtension);
             $preview = $this->getPreviewHtml($tempFilePath, $fileType, $fileName);
 
@@ -45,8 +42,10 @@ class FileController extends Controller
                 'size' => number_format($fileSize / 1024, 2) . ' KB',
                 'extension' => $fileExtension,
                 'preview' => $preview,
+                'tempFilePath' => $tempFilePath
             ]);
         }
+
         $file = $request->file('file');
         $content = $request->input('content');
         if ($file) {
@@ -144,26 +143,32 @@ class FileController extends Controller
     public function decrypt(Request $request)
     {
         $encryptedContent = $request->input('encryptedContent');
+        $fileExtension = $request->input('extension');
 
         if ($encryptedContent) {
             $decryptedContent = $this->decryptData($encryptedContent);
 
             if ($decryptedContent !== null) {
-
                 $tempPath = storage_path('app/temp');
+                $storageTempPath = storage_path('app/public/temp');
 
                 // Create the 'temp' directory if it doesn't exist
                 if (!File::isDirectory($tempPath)) {
                     File::makeDirectory($tempPath, 0755, true, true);
                 }
 
-                $tempFilePath = $tempPath . '/decrypted_file.txt';
+                $tempFilePath = $tempPath . '/decrypted_file.' . $fileExtension;
+                $publicFilePath = $storageTempPath . '/decrypted_file.' . $fileExtension;
+
                 file_put_contents($tempFilePath, $decryptedContent);
 
+                // Copy the file to the public/temp directory
+                File::copy($tempFilePath, $publicFilePath);
+                $url = asset('storage/temp/decrypted_file.' . $fileExtension);
                 return response()->json([
                     'success' => true,
                     'message' => 'File decrypted successfully.',
-                    'tempFilePath' => $tempFilePath,
+                    'tempFilePath' => $url,
                 ]);
             } else {
                 return response()->json(['error' => 'Decryption failed. Make sure the file was encrypted before.'], 400);
@@ -183,7 +188,7 @@ class FileController extends Controller
         $encodedKey = base64_encode($key);
         $encodedIv = base64_encode($iv);
         $encodedEncryptedData = base64_encode($encrypted);
-        
+
         $encryptedContent = 'KEY:' . $encodedKey . "\n" . 'IV:' . $encodedIv . "\n" . $encodedEncryptedData;
 
         return $encryptedContent;

@@ -50,15 +50,8 @@
                     <div id="encryptedContent" class="text-center" style="display: none;">
                         <h2 class="text-center">Encrypted Content</h2>
                         <div class="d-flex flex-direction-column">
-                            {{-- <input type="hidden" id="key" name="key" value=""> --}}
                             <textarea id="encryptedContentTextarea" name="encryptedContent" rows="10" cols="50" readonly></textarea>
                             <button class="btn mt-2" id="saveEncryptedBtn">Save Encrypted File</button>
-                        </div>
-                    </div>
-                    <div id="decryptedContent" style="display: none;">
-                        <h2 class="text-center">Decrypted Content</h2>
-                        <div class="d-flex flex-direction-column">
-                            <button class="btn mt-2" id="saveDecryptedBtn">Save Decrypted File</button>
                         </div>
                     </div>
                 </div>
@@ -69,8 +62,6 @@
     @endsection
 
 @section('Js')
-
-    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 
     <script>
         //Initiallization of the file input
@@ -90,32 +81,6 @@
         var encryptRoute = "{{ route('file.encrypt') }}";
         var decryptRoute = "{{ route('file.decrypt') }}";
         var detailsRoute = "{{ route('file.details') }}";
-    </script>
-
-    <script>
-        //hide the error msg
-        document.addEventListener('DOMContentLoaded', function () {
-            var errorMessagesDiv = document.getElementById('errorMessages');
-
-            if (errorMessagesDiv) {
-                setTimeout(function () {
-                    errorMessagesDiv.style.display = 'none';
-                }, 5000);
-            }
-        });
-        function showAlert(message) {
-            var errorMessagesDiv = document.getElementById('errorMessages');
-            if (errorMessagesDiv) {
-                var alertElement = errorMessagesDiv.querySelector('.alert');
-                if (alertElement) {
-                    alertElement.innerHTML = '<i class="fa-regular fa-circle-xmark"></i><p>' + message + '</p>';
-                    errorMessagesDiv.style.display = 'block';
-                    setTimeout(function () {
-                        errorMessagesDiv.style.display = 'none';
-                    }, 5000);
-                }
-            }
-        }
     </script>
 
 @stop

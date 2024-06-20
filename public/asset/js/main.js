@@ -27,13 +27,13 @@ $(document).ready(function() {
                         .then(() => writable.close());
                 })
                 .then(() => {
-                    alert(`File was saved successfully.`);
+                    showSuccessMessage(`File was saved successfully.`);
                 })
                 .catch(handleError);
         }
 
         function handleError(error) {
-            console.error(error);
+            showErrorMessage(error);
         }
     }
 
@@ -47,7 +47,7 @@ $(document).ready(function() {
             writable.write(blob)
                 .then(() => writable.close())
                 .then(() => {
-                    showAlert(`File was saved as: ${handle.name}`);
+                    showSuccessMessage(`File was saved as: ${handle.name}`);
                 })
                 .catch(handleError);
         }
@@ -78,15 +78,15 @@ $(document).ready(function() {
                         $('#encryptedContent').show();
                         $('#decryptBtn').show();
                     } else {
-                        showAlert('Encryption failed: ' + data.error);
+                        showErrorMessage('Encryption failed: ' + data.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    showAlert('An error occurred: ' + error);
+                    showErrorMessage('An error occurred: ' + error);
                 }
             });
         } else {
-            showAlert('Please select a file to encrypt.');
+            showErrorMessage('Please select a file to encrypt.');
         }
     }
 
@@ -121,10 +121,12 @@ $(document).ready(function() {
 
     function decryptFile() {
         const encryptedContent = $('#encryptedContentTextarea').val();
+        const fileExtension = $('#fileExtension').text();
 
         if (encryptedContent) {
             const requestData = {
-                encryptedContent: encryptedContent
+                encryptedContent: encryptedContent,
+                extension: fileExtension
             };
 
             $.ajax({
@@ -140,11 +142,11 @@ $(document).ready(function() {
                         const tempFilePath = data.tempFilePath;
                         showDecryptedFileDetails(tempFilePath);
                     } else {
-                        showAlert(data.error);
+                        showErrorMessage(data.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    showAlert(error);
+                    showErrorMessage(error);
                 }
             });
         }
@@ -175,7 +177,7 @@ $(document).ready(function() {
                 $('#detailsSection').show();
             },
             error: function(xhr, status, error) {
-                showAlert('An error occurred: '. error);
+                showErrorMessage('An error occurred: '. error)
             }
         });
     }
@@ -195,19 +197,39 @@ $(document).ready(function() {
             },
             success: function(data) {
                 if (data.error) {
-                    showAlert(data.error);
+                    showErrorMessage(data.error)
                 } else {
+                    const fileExtension = data.extension.toLowerCase();
+                    const tempFilePath = data.tempFilePath;
+
+                    if (fileExtension === 'pdf') {
+                        $('#filePreview').html('<iframe src="'+ tempFilePath + '" width="100%" height="500px"></iframe>');
+                    } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(fileExtension)) {
+                        $('#filePreview').html('<img src="'+ tempFilePath + '" alt="' + data.name + '" style="max-width: 100%; max-height: 400px;">');
+                    } else {
+                        $('#filePreview').html('<a href="'+ tempFilePath + '" download>' + data.name + '</a>');
+                    }
+
                     $('#fileName').text(data.name);
                     $('#fileSize').text(data.size);
                     $('#fileExtension').text(data.extension);
-                    $('#filePreview').html(data.preview);
                     $('#detailsSection').show();
                 }
             },
             error: function(xhr, status, error) {
-                showAlert('An error occurred: '. error);
+                showErrorMessage(error)
             }
         });
+    }
+
+    function showSuccessMessage(message) {
+        $('#successMessages .alert p').text(message);
+        $('#successMessages').show().delay(5000).fadeOut();
+    }
+
+    function showErrorMessage(message) {
+        $('#errorMessages .alert p').text(message);
+        $('#errorMessages').show().delay(5000).fadeOut();
     }
 });
 

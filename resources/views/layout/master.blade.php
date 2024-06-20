@@ -13,12 +13,8 @@
     <link rel="stylesheet" href="{{ asset('asset/css/all.min.css') }}">
     <!-- Tempusdominus Bootstrap 4 -->
     <link rel="stylesheet" href="{{ asset('asset/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css') }}">
-    <!-- iCheck -->
-    <link rel="stylesheet" href="{{ asset('asset/plugins/icheck-bootstrap/icheck-bootstrap.min.css') }}">
     <!-- Theme style -->
     <link rel="stylesheet" href="{{ asset('asset/css/dashboard.css') }}">
-    <!-- overlayScrollbars -->
-    {{-- <link rel="stylesheet" href="{{ asset('asset/plugins/overlayScrollbars/css/OverlayScrollbars.min.css') }}"> --}}
     <!-- Customized Main Css -->
     <link rel="stylesheet" href="{{ asset('asset/css/style.css') }}">
 </head>
