@@ -12,18 +12,18 @@ use Illuminate\Http\UploadedFile;
 class FileController extends Controller
 {
 
-    private function createTemporaryFile($filePath)
-    {
-        $tempFile = new UploadedFile(
-            $filePath,
-            pathinfo($filePath, PATHINFO_BASENAME),
-            mime_content_type($filePath),
-            null,
-            true
-        );
+    // private function createTemporaryFile($filePath)
+    // {
+    //     $tempFile = new UploadedFile(
+    //         $filePath,
+    //         pathinfo($filePath, PATHINFO_BASENAME),
+    //         mime_content_type($filePath),
+    //         null,
+    //         true
+    //     );
 
-        return $tempFile;
-    }
+    //     return $tempFile;
+    // }
 
     public function showFile(Request $request)
     {
@@ -125,15 +125,9 @@ class FileController extends Controller
             $fileContent   = file_get_contents($file->getRealPath());
             $encryptedData = $this->encryptData($fileContent);
 
-            // Extract the key and encrypted content from the $encryptedData
-            $encryptedDataParts = explode("\n", $encryptedData);
-            $key = str_replace('KEY:', '', $encryptedDataParts[0]);
-            $encryptedContent = $encryptedDataParts[2];
-
             return response()->json([
                 'encryptedFileName' => "$fileName.encrypted.$fileExtension",
                 'encryptedContent'  =>  $encryptedData ,
-                'key'               => $key,
             ]);
         }
 
