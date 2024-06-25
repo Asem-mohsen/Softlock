@@ -1,7 +1,7 @@
 <nav class="nav d-flex align-items-center">
     <div class="container">
         <div class="nav-items d-flex justify-content-around">
-            <p class="logo">Assem</p>
+            <p class="logo">Softlock Task</p>
             <ul class="d-flex justify-content-center align-items-center">
                 <li>
                     <a href="{{route('Home')}}">

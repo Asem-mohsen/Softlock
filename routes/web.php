@@ -11,5 +11,6 @@ Route::controller(FileController::class)->group(function(){
     Route::post('/file-details', 'showFile')->name('file.details');
     Route::post('/encrypt'     , 'encrypt' )->name('file.encrypt');
     Route::post('/decrypt'     , 'decrypt' )->name('file.decrypt');
+    Route::post('/upload-chunk', 'uploadChunk')->name('file.chunk');
 });
 

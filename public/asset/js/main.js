@@ -1,5 +1,58 @@
 $(document).ready(function() {
 
+const chunkSize = 1024 * 1024; // 1MB chunks
+
+    $('#fileInput').on('change', function() {
+        let file = this.files[0];
+        if (file) {
+            uploadFileInChunks(file);
+        }
+    });
+
+    function uploadFileInChunks(file) {
+        let chunks = Math.ceil(file.size / chunkSize);
+        let currentChunk = 0;
+
+        function uploadNextChunk() {
+            let start = currentChunk * chunkSize;
+            let end = Math.min(file.size, start + chunkSize);
+            let chunk = file.slice(start, end);
+
+            let formData = new FormData();
+            formData.append('chunk', chunk);
+            formData.append('fileName', file.name);
+            formData.append('chunkNumber', currentChunk);
+            formData.append('totalChunks', chunks);
+
+            axios.post(chunkRoute, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            }).then(response => {
+                console.log(response.data.message);
+                currentChunk++;
+
+                if (currentChunk < chunks) {
+                    // More chunks to upload
+                    uploadNextChunk();
+                } else {
+                    // File upload complete
+                    console.log('File upload complete');
+                }
+
+                // Update progress
+                let progress = (currentChunk / chunks) * 100;
+                updateProgressBar(progress);
+
+            }).catch(error => {
+                console.error('Error uploading chunk:', error);
+            });
+        }
+
+        // Start uploading chunks
+        uploadNextChunk();
+    }
+
     $('#saveEncryptedBtn').on('click', function() {
         var encryptedContent = $('#encryptedContentTextarea').val();
         var blob = new Blob([encryptedContent], { type: 'text/plain' });
@@ -58,6 +111,7 @@ $(document).ready(function() {
         encryptFile();
     });
 
+    // Update the encryptFile function to use the new uploadFileWithProgress function
     function encryptFile() {
         const file = $('#fileInput')[0].files[0];
 
@@ -65,30 +119,42 @@ $(document).ready(function() {
             const formData = new FormData();
             formData.append('file', file);
 
-            $.ajax({
-                url: encryptRoute,
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(data) {
-                    if (data.encryptedFileName) {
-                        $('#encryptedFileName').text(data.encryptedFileName);
-                        $('#encryptedContentTextarea').val(data.encryptedContent);
-                        $('#encryptedContent').show();
-                        $('#decryptBtn').show();
-                    } else {
-                        showErrorMessage('Encryption failed: ' + data.error);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    showErrorMessage('An error occurred: ' + error);
-                }
-            });
+            uploadFileWithProgress(formData, encryptRoute);
         } else {
             showErrorMessage('Please select a file to encrypt.');
         }
     }
+    // function encryptFile() {
+    //     const file = $('#fileInput')[0].files[0];
+
+    //     if (file) {
+    //         const formData = new FormData();
+    //         formData.append('file', file);
+
+    //         $.ajax({
+    //             url: encryptRoute,
+    //             type: 'POST',
+    //             data: formData,
+    //             processData: false,
+    //             contentType: false,
+    //             success: function(data) {
+    //                 if (data.encryptedFileName) {
+    //                     $('#encryptedFileName').text(data.encryptedFileName);
+    //                     $('#encryptedContentTextarea').val(data.encryptedContent);
+    //                     $('#encryptedContent').show();
+    //                     $('#decryptBtn').show();
+    //                 } else {
+    //                     showErrorMessage('Encryption failed: ' + data.error);
+    //                 }
+    //             },
+    //             error: function(xhr, status, error) {
+    //                 showErrorMessage('An error occurred: ' + error);
+    //             }
+    //         });
+    //     } else {
+    //         showErrorMessage('Please select a file to encrypt.');
+    //     }
+    // }
 
 
     $('#decryptBtn').click(function() {
@@ -230,6 +296,59 @@ $(document).ready(function() {
     function showErrorMessage(message) {
         $('#errorMessages .alert p').text(message);
         $('#errorMessages').show().delay(5000).fadeOut();
+    }
+
+    function uploadFileWithProgress(formData, url) {
+        // Show progress bar
+        $('.progress').show();
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+
+        // Set up event listeners
+        xhr.upload.onprogress = function(event) {
+            if (event.lengthComputable) {
+                var percentComplete = (event.loaded / event.total) * 100;
+                updateProgressBar(percentComplete);
+            }
+        };
+
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                if (data.encryptedFileName) {
+                    $('#encryptedFileName').text(data.encryptedFileName);
+                    $('#encryptedContentTextarea').val(data.encryptedContent);
+                    $('#encryptedContent').show();
+                    $('#decryptBtn').show();
+                    updateProgressBar(100);
+                    setTimeout(() => {
+                        $('.progress').hide();
+                        updateProgressBar(0);
+                    }, 1000);
+                } else {
+                    showErrorMessage('Encryption failed: ' + data.error);
+                }
+            } else {
+                showErrorMessage('An error occurred: ' + xhr.statusText);
+            }
+        };
+
+        xhr.onerror = function() {
+            showErrorMessage('An error occurred during the upload.');
+            $('.progress').hide();
+        };
+
+        // Add CSRF token to the request headers
+        xhr.setRequestHeader('X-CSRF-TOKEN', $('meta[name="csrf-token"]').attr('content'));
+
+        xhr.send(formData);
+    }
+
+    function updateProgressBar(percentComplete) {
+        $('#progressBar').css('width', percentComplete + '%')
+                        .attr('aria-valuenow', percentComplete)
+                        .text(Math.round(percentComplete) + '%');
     }
 });
 

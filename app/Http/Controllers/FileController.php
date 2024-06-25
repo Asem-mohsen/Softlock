@@ -12,19 +12,6 @@ use Illuminate\Http\UploadedFile;
 class FileController extends Controller
 {
 
-    // private function createTemporaryFile($filePath)
-    // {
-    //     $tempFile = new UploadedFile(
-    //         $filePath,
-    //         pathinfo($filePath, PATHINFO_BASENAME),
-    //         mime_content_type($filePath),
-    //         null,
-    //         true
-    //     );
-
-    //     return $tempFile;
-    // }
-
     public function showFile(Request $request)
     {
         $tempFilePath = $request->input('tempFilePath');
@@ -64,7 +51,7 @@ class FileController extends Controller
 
             return response()->json([
                 'name'      => $fileName,
-                'size'      => number_format($fileSize / 1024, 2) . ' KB',
+                'size'      => $this->formatFileSize($fileSize),
                 'extension' => $fileExtension,
                 'preview'   => $preview,
             ]);
@@ -114,6 +101,61 @@ class FileController extends Controller
             default:
                 return '<img src="' . asset('asset/images/file.png') . '" alt="File Icon" width="100">';
         }
+    }
+
+    private function formatFileSize($bytes)
+    {
+        $units = ['B' , 'KB', 'MB', 'GB', 'TB'];
+        $i = 0;
+        while ($bytes >= 1024 && $i < count($units) - 1) {
+            $bytes /= 1024;
+            $i++;
+        }
+        return round($bytes, 2) . ' ' . $units[$i];
+    }
+
+    public function uploadChunk(Request $request)
+    {
+        $chunk = $request->file('chunk');
+        $fileName = $request->input('fileName');
+        $chunkNumber = $request->input('chunkNumber');
+        $totalChunks = $request->input('totalChunks');
+
+        $tempDir = storage_path('app/chunks/' . $fileName);
+        if (!File::isDirectory($tempDir)) {
+            File::makeDirectory($tempDir, 0755, true);
+        }
+
+        $chunk->move($tempDir, $chunkNumber);
+
+        if ($chunkNumber == $totalChunks - 1) {
+            // All chunks received, merge the file
+            $this->mergeChunks($fileName, $totalChunks);
+            return response()->json(['message' => 'File uploaded successfully']);
+        }
+
+        return response()->json(['message' => 'Chunk received']);
+    }
+
+    private function mergeChunks($fileName, $totalChunks)
+    {
+        $tempDir = storage_path('app/chunks/' . $fileName);
+        $finalPath = storage_path('app/public/temp/' . $fileName);
+
+        $out = fopen($finalPath, "wb");
+
+        for ($i = 0; $i < $totalChunks; $i++) {
+            $in = fopen($tempDir . '/' . $i, "rb");
+            stream_copy_to_stream($in, $out);
+            fclose($in);
+            unlink($tempDir . '/' . $i);
+        }
+
+        fclose($out);
+        rmdir($tempDir);
+
+        // Process the uploaded file as needed
+        // You may want to call your existing file processing logic here
     }
 
     public function encrypt(Request $request)

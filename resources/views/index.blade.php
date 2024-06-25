@@ -20,6 +20,9 @@
                         </div>
                     </div>
                 </div>
+                <div class="progress mt-5">
+                    <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                </div>
             </div>
         </section>
 
@@ -62,6 +65,7 @@
     @endsection
 
 @section('Js')
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
     <script>
         //Initiallization of the file input
@@ -81,6 +85,7 @@
         var encryptRoute = "{{ route('file.encrypt') }}";
         var decryptRoute = "{{ route('file.decrypt') }}";
         var detailsRoute = "{{ route('file.details') }}";
+        var chunkRoute   = "{{ route('file.chunk'  ) }}";
     </script>
 
 @stop
