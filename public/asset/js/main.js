@@ -1,6 +1,6 @@
 $(document).ready(function() {
 
-const chunkSize = 1024 * 1024; // 1MB chunks
+    const chunkSize = 1024 * 1024;
 
     $('#fileInput').on('change', function() {
         let file = this.files[0];
@@ -55,24 +55,25 @@ const chunkSize = 1024 * 1024; // 1MB chunks
 
     $('#saveEncryptedBtn').on('click', function() {
         var encryptedContent = $('#encryptedContentTextarea').val();
-        var blob = new Blob([encryptedContent], { type: 'text/plain' });
-
-        saveFileWithUserPrompt(blob, 'encrypted');
+        var blob = new Blob([encryptedContent], { type: 'application/octet-stream' });
+    
+        saveFileWithUserPrompt(blob, 'encrypted', window.originalFileExtension);
     });
-
-    function saveFileWithUserPrompt(blob, fileType) {
-        var defaultFileName = `${fileType}_file.txt`;
+    
+    function saveFileWithUserPrompt(blob, fileType, originalExtension) {
+        var defaultFileName = `${fileType}_file.${originalExtension}`;
         var options = {
+            suggestedName: defaultFileName,
             types: [{
-                description: 'Text Files',
-                accept: { 'text/plain': ['.txt'] },
+                description: 'Encrypted File',
+                accept: { 'application/octet-stream': ['.' + originalExtension] },
             }],
         };
-
+    
         window.showSaveFilePicker(options)
             .then(handleSaveFile)
             .catch(handleError);
-
+    
         function handleSaveFile(handle) {
             handle.createWritable()
                 .then(writable => {
@@ -80,29 +81,14 @@ const chunkSize = 1024 * 1024; // 1MB chunks
                         .then(() => writable.close());
                 })
                 .then(() => {
-                    showSuccessMessage(`File was saved successfully.`);
+                    showSuccessMessage(`File was saved successfully as ${handle.name}`);
+                    showFileDetails(new File([blob], handle.name, { type: 'application/octet-stream' }), null);
                 })
                 .catch(handleError);
         }
-
+    
         function handleError(error) {
             showErrorMessage(error);
-        }
-    }
-
-    function showSaveFilePickerAndSave(blob, suggestedName, options) {
-        window.showSaveFilePicker(options)
-            .then(handleSaveFile)
-            .catch(handleError);
-
-        function handleSaveFile(handle) {
-            var writable = handle.createWritable();
-            writable.write(blob)
-                .then(() => writable.close())
-                .then(() => {
-                    showSuccessMessage(`File was saved as: ${handle.name}`);
-                })
-                .catch(handleError);
         }
     }
 
@@ -111,51 +97,18 @@ const chunkSize = 1024 * 1024; // 1MB chunks
         encryptFile();
     });
 
-    // Update the encryptFile function to use the new uploadFileWithProgress function
     function encryptFile() {
         const file = $('#fileInput')[0].files[0];
 
         if (file) {
             const formData = new FormData();
             formData.append('file', file);
-
+            window.originalFileExtension = file.name.split('.').pop();
             uploadFileWithProgress(formData, encryptRoute);
         } else {
             showErrorMessage('Please select a file to encrypt.');
         }
     }
-    // function encryptFile() {
-    //     const file = $('#fileInput')[0].files[0];
-
-    //     if (file) {
-    //         const formData = new FormData();
-    //         formData.append('file', file);
-
-    //         $.ajax({
-    //             url: encryptRoute,
-    //             type: 'POST',
-    //             data: formData,
-    //             processData: false,
-    //             contentType: false,
-    //             success: function(data) {
-    //                 if (data.encryptedFileName) {
-    //                     $('#encryptedFileName').text(data.encryptedFileName);
-    //                     $('#encryptedContentTextarea').val(data.encryptedContent);
-    //                     $('#encryptedContent').show();
-    //                     $('#decryptBtn').show();
-    //                 } else {
-    //                     showErrorMessage('Encryption failed: ' + data.error);
-    //                 }
-    //             },
-    //             error: function(xhr, status, error) {
-    //                 showErrorMessage('An error occurred: ' + error);
-    //             }
-    //         });
-    //     } else {
-    //         showErrorMessage('Please select a file to encrypt.');
-    //     }
-    // }
-
 
     $('#decryptBtn').click(function() {
         decryptFile();
@@ -169,17 +122,7 @@ const chunkSize = 1024 * 1024; // 1MB chunks
             var fileContent = e.target.result;
             $('#encryptedContentTextarea').val(fileContent);
 
-            // check if the file is encrypted or not
-            if (isEncryptedFile(fileContent)) {
-
-                // already encrypted
-                showFileDetails(file, fileContent);
-                $('#decryptBtn').show();
-            } else {
-                // not encrypted
-                showFileDetails(file, fileContent);
-                $('#decryptBtn').hide();
-            }
+            showFileDetails(file, fileContent);
         }
 
         reader.readAsText(file);
@@ -192,7 +135,7 @@ const chunkSize = 1024 * 1024; // 1MB chunks
         if (encryptedContent) {
             const requestData = {
                 encryptedContent: encryptedContent,
-                extension: fileExtension
+                fileName: 'decrypted_file.' + fileExtension 
             };
 
             $.ajax({
@@ -203,12 +146,20 @@ const chunkSize = 1024 * 1024; // 1MB chunks
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
-                success: function(data) {
-                    if (data.success) {
-                        const tempFilePath = data.tempFilePath;
-                        showDecryptedFileDetails(tempFilePath);
+                success: function(response) {
+                    if (response.success) {
+                        const decryptedContent = atob(response.decryptedContent);
+                        
+                        $('#decryptedContentTextarea').val(decryptedContent);
+                        $('#decryptedFileName').text(response.fileName);
+    
+                        $('#decryptedContent').show();
+    
+                        showSuccessMessage('File decrypted successfully.');
+    
+                        updateFilePreview(decryptedContent, response.fileName);
                     } else {
-                        showErrorMessage(data.error);
+                        showErrorMessage('Decryption failed: ' + response.error);
                     }
                 },
                 error: function(xhr, status, error) {
@@ -217,18 +168,48 @@ const chunkSize = 1024 * 1024; // 1MB chunks
             });
         }
     }
-
-    function isEncryptedFile(fileContent) {
-        var keyHeaderRegex = /^KEY:/;
-        return keyHeaderRegex.test(fileContent);
+    function updateFilePreview(content, fileName) {
+        const fileExtension = fileName.split('.').pop().toLowerCase();
+        const fileType = getFileType(fileExtension);
+    
+        let previewHtml = '';
+    
+        switch (fileType) {
+            case 'image':
+                previewHtml = `<img src="data:image/${fileExtension};base64,${btoa(content)}" alt="${fileName}" style="max-width: 100%; max-height: 400px;">`;
+                break;
+            case 'text':
+                previewHtml = `<pre>${content}</pre>`;
+                break;
+            case 'pdf':
+                previewHtml = `<p>PDF preview not available. Content decrypted successfully.</p>`;
+                break;
+            default:
+                previewHtml = `<p>Preview not available for this file type. Content decrypted successfully.</p>`;
+        }
+    
+        $('#filePreview').html(previewHtml);
+    }
+    
+    function getFileType(extension) {
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+        const textExtensions = ['txt', 'md', 'csv'];
+        const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
+        if (imageExtensions.includes(extension)) return 'image';
+        if (textExtensions.includes(extension)) return 'text';
+        if (videoExtensions.includes(extension)) return 'video';
+        if (extension === 'pdf') return 'pdf';
+        return 'other';
     }
 
-    // function to display the file details
+
     function showFileDetails(file, fileContent) {
         var formData = new FormData();
         formData.append('file', file);
-        formData.append('content', fileContent);
-
+        if (fileContent) {
+            formData.append('content', fileContent);
+        }
+    
         $.ajax({
             url: detailsRoute,
             type: 'POST',
@@ -236,18 +217,25 @@ const chunkSize = 1024 * 1024; // 1MB chunks
             processData: false,
             contentType: false,
             success: function(data) {
+                console.log(data)
                 $('#fileName').text(data.name);
                 $('#fileSize').text(data.size);
                 $('#fileExtension').text(data.extension);
-                $('#filePreview').html(data.preview);
+                
+                if (data.preview) {
+                    $('#filePreview').html(data.preview);
+                    
+                } else {
+                    $('#filePreview').html('<p>Encrypted file content (preview not available)</p>');
+                }
+                
                 $('#detailsSection').show();
             },
             error: function(xhr, status, error) {
-                showErrorMessage('An error occurred: '. error)
+                showErrorMessage('An error occurred: ' + error);
             }
         });
     }
-
     function showDecryptedFileDetails(tempFilePath) {
         const requestData = {
             tempFilePath: tempFilePath
@@ -290,15 +278,15 @@ const chunkSize = 1024 * 1024; // 1MB chunks
 
     function showSuccessMessage(message) {
         $('#successMessages .alert p').text(message);
-        $('#successMessages').show().delay(5000).fadeOut();
+        $('#successMessages').show().delay(9000).fadeOut();
     }
 
     function showErrorMessage(message) {
         $('#errorMessages .alert p').text(message);
-        $('#errorMessages').show().delay(5000).fadeOut();
+        $('#errorMessages').show().delay(9000).fadeOut();
     }
 
-    function uploadFileWithProgress(formData, url) {
+    function uploadFileWithProgress(formData, url, originalExtension) {
         // Show progress bar
         $('.progress').show();
 
@@ -315,6 +303,7 @@ const chunkSize = 1024 * 1024; // 1MB chunks
 
         xhr.onload = function() {
             if (xhr.status === 200) {
+                
                 var data = JSON.parse(xhr.responseText);
                 if (data.encryptedFileName) {
                     $('#encryptedFileName').text(data.encryptedFileName);
@@ -326,6 +315,7 @@ const chunkSize = 1024 * 1024; // 1MB chunks
                         $('.progress').hide();
                         updateProgressBar(0);
                     }, 1000);
+
                 } else {
                     showErrorMessage('Encryption failed: ' + data.error);
                 }
@@ -350,5 +340,6 @@ const chunkSize = 1024 * 1024; // 1MB chunks
                         .attr('aria-valuenow', percentComplete)
                         .text(Math.round(percentComplete) + '%');
     }
+    
 });
 

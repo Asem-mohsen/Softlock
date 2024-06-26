@@ -47,13 +47,15 @@ class FileController extends Controller
             $path     = $file->storeAs('temp', $fileNameWithExtension, 'public');
 
             $fileType = $this->getFileType($fileExtension);
-            $preview  = $this->getPreviewHtml($path, $fileType, $fileName);
-
+            // $preview  = $this->getPreviewHtml($path, $fileType, $fileName);
+            $preview = $this->getPreviewHtml(Storage::url($path), $fileType, $fileName);
+            
             return response()->json([
                 'name'      => $fileName,
                 'size'      => $this->formatFileSize($fileSize),
                 'extension' => $fileExtension,
                 'preview'   => $preview,
+                'tempFilePath' => Storage::url($path)
             ]);
         }
 
@@ -65,13 +67,16 @@ class FileController extends Controller
         $extension = strtolower($extension);
         $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
         $textExtensions  = ['txt', 'md', 'csv'];
-
+        $videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
+        
         if (in_array($extension, $imageExtensions)) {
             return 'image';
         } elseif ($extension === 'pdf') {
             return 'pdf';
         } elseif (in_array($extension, $textExtensions)) {
             return 'text';
+        } elseif (in_array($extension, $videoExtensions)) {
+            return 'video';
         } else {
             return 'other';
         }
@@ -81,7 +86,8 @@ class FileController extends Controller
     {
         $storagePath = Storage::url($path);
         $storagePathtext = storage_path('app/public/' . $path);
-
+        
+        $storagePath = $path;
         switch ($fileType) {
             case 'image':
                 return '<img src="' . $storagePath . '" alt="' . $fileName . '" style="max-width: 100%; max-height: 400px;">';
@@ -98,6 +104,11 @@ class FileController extends Controller
                     $content = substr($content, 0, $limit) . '...';
                 }
                 return '<pre style="text-align: left;">' . htmlspecialchars($content) . '</pre>';
+            case 'video':
+                return '<video width="100%" height="auto" controls>
+                            <source src="' . $path . '" type="video/' . pathinfo($fileName, PATHINFO_EXTENSION) . '">
+                            Your browser does not support the video tag.
+                        </video>';
             default:
                 return '<img src="' . asset('asset/images/file.png') . '" alt="File Icon" width="100">';
         }
@@ -129,12 +140,27 @@ class FileController extends Controller
         $chunk->move($tempDir, $chunkNumber);
 
         if ($chunkNumber == $totalChunks - 1) {
-            // All chunks received, merge the file
-            $this->mergeChunks($fileName, $totalChunks);
-            return response()->json(['message' => 'File uploaded successfully']);
+            // All parts received, merge the file
+            // file info
+            $tempFilePath = $this->mergeChunks($fileName, $totalChunks);
+            $fileInfo = pathinfo($tempFilePath);
+            $fileName = $fileInfo['filename'];
+            $fileSize = filesize($tempFilePath);
+            $fileExtension = $fileInfo['extension'];
+            $fileType = $this->getFileType($fileExtension);
+            $preview = $this->getPreviewHtml(Storage::url('public/temp/' . $fileName . '.' . $fileExtension), $fileType, $fileName);
+
+            return response()->json([
+                'success' => 'File uploaded successfully',
+                'name' => $fileName,
+                'size' => $this->formatFileSize($fileSize),
+                'extension' => $fileExtension,
+                'preview' => $preview,
+                'tempFilePath' => Storage::url('public/temp/' . $fileName . '.' . $fileExtension)
+            ]);
         }
 
-        return response()->json(['message' => 'Chunk received']);
+        return response()->json(['error' => 'Chunk received']);
     }
 
     private function mergeChunks($fileName, $totalChunks)
@@ -154,8 +180,7 @@ class FileController extends Controller
         fclose($out);
         rmdir($tempDir);
 
-        // Process the uploaded file as needed
-        // You may want to call your existing file processing logic here
+        return $finalPath;
     }
 
     public function encrypt(Request $request)
@@ -164,86 +189,99 @@ class FileController extends Controller
             $file          = $request->file('file');
             $fileName      = $file->getClientOriginalName();
             $fileExtension = $file->getClientOriginalExtension();
-            $fileContent   = file_get_contents($file->getRealPath());
-            $encryptedData = $this->encryptData($fileContent);
+            $tempPath      = $file->path();
+            $encryptedFilePath = $this->encryptData($tempPath);
+            $encryptedContent = file_get_contents($encryptedFilePath);
+            
 
             return response()->json([
-                'encryptedFileName' => "$fileName.encrypted.$fileExtension",
-                'encryptedContent'  =>  $encryptedData ,
+                'success' =>'File Encrypted Successfilly',
+                'encryptedFileName' => $fileName . '.encrypted',
+                'encryptedContent' => base64_encode($encryptedContent), 
             ]);
         }
 
         return response()->json(['error' => 'No file selected.'], 400);
     }
 
-    public function decrypt(Request $request)
-    {
-        $encryptedContent = $request->input('encryptedContent');
-        $fileExtension = $request->input('extension');
-
-        if ($encryptedContent) {
-            $decryptedContent = $this->decryptData($encryptedContent);
-
-            if ($decryptedContent !== null) {
-                $tempPath = storage_path('app/temp');
-                $storageTempPath = storage_path('app/public/temp');
-
-                // Create the 'temp' directory if it doesn't exist
-                if (!File::isDirectory($tempPath)) {
-                    File::makeDirectory($tempPath, 0755, true, true);
-                }
-
-                $tempFilePath = $tempPath . '/decrypted_file.' . $fileExtension;
-                $publicFilePath = $storageTempPath . '/decrypted_file.' . $fileExtension;
-
-                file_put_contents($tempFilePath, $decryptedContent);
-
-                // Copy the file to the public/temp directory
-                File::copy($tempFilePath, $publicFilePath);
-                $url = asset('storage/temp/decrypted_file.' . $fileExtension);
-                return response()->json([
-                    'success' => true,
-                    'message' => 'File decrypted successfully.',
-                    'tempFilePath' => $url,
-                ]);
-            } else {
-                return response()->json(['error' => 'Decryption failed. Make sure the file was encrypted before.'], 400);
-            }
-        }
-        return response()->json(['error' => 'No encrypted content or key provided.'], 400);
-    }
-
-    private function encryptData($data)
+    private function encryptData($filePath)
     {
         $key = openssl_random_pseudo_bytes(32);
         $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
 
-        $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        $inputFile = fopen($filePath, 'rb');
+        $outputFile = fopen($filePath . '.encrypted', 'wb');
+        
+        // here we are writtnig the key and IV at the beginning of the file
+        $chunkSize = 1024 * 1024;
+        fwrite($outputFile, base64_encode($key) . "\n");
+        fwrite($outputFile, base64_encode($iv) . "\n");
 
-        // Encode key and IV for easy storage and transmission
-        $encodedKey = base64_encode($key);
-        $encodedIv = base64_encode($iv);
-        $encodedEncryptedData = base64_encode($encrypted);
+        while (!feof($inputFile)) {
+            $plaintext = fread($inputFile, $chunkSize);
+            $ciphertext = openssl_encrypt($plaintext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+            fwrite($outputFile, $ciphertext);
+        }
+    
+        fclose($inputFile);
+        fclose($outputFile);
+    
+        return $filePath . '.encrypted';
 
-        $encryptedContent = 'KEY:' . $encodedKey . "\n" . 'IV:' . $encodedIv . "\n" . $encodedEncryptedData;
+    }
 
-        return $encryptedContent;
-
+    public function decrypt(Request $request)
+    {
+        $encryptedContent = $request->input('encryptedContent');
+        $fileName = $request->input('fileName');
+    
+        if ($encryptedContent) {
+            $decodedContent = $this->decryptData($encryptedContent);
+    
+            if ($decodedContent !== null) {
+                // Encode the content to base64 to safely transmit it
+                $base64Content = base64_encode($decodedContent);
+                
+                return response()->json([
+                    'success' => true,
+                    'decryptedContent' => $base64Content,
+                    'fileName' => $fileName
+                ]);
+            } else {
+                return response()->json(['error' => 'Decryption failed.'], 400);
+            }
+        }
+    
+        return response()->json(['error' => 'No encrypted content provided.'], 400);
     }
 
     private function decryptData($encryptedContent)
     {
-        // Split the encrypted content to extract the IV and encrypted data
-        $encryptedContentParts = explode("\n", $encryptedContent);
-        $key = base64_decode(str_replace('KEY:', '', $encryptedContentParts[0]));
-        $iv = base64_decode(trim(str_replace('IV:', '', $encryptedContentParts[1])));
-        $encrypted = base64_decode($encryptedContentParts[2]);
+        // Decode the encrypted content
+        $decodedContent = base64_decode($encryptedContent);
 
-        // Decrypt the data using the provided key and IV
-        $decrypted = openssl_decrypt($encrypted, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        // Read key and IV from the beginning of the decoded content
+        $encryptedFile = fopen('php://memory', 'r+');
+        fwrite($encryptedFile, $decodedContent);
+        rewind($encryptedFile);
 
-        return $decrypted !== false ? $decrypted : null;
+        $key = base64_decode(trim(fgets($encryptedFile)));
+        $iv = base64_decode(trim(fgets($encryptedFile)));
 
+        // Prepare to store decrypted content in memory
+        $decryptedContent = '';
+
+        // Decrypt the file chunk by chunk
+        $chunkSize = 1024 * 1024; // 1MB chunks
+        while (!feof($encryptedFile)) {
+            $ciphertext = fread($encryptedFile, $chunkSize);
+            $plaintext = openssl_decrypt($ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+            $decryptedContent .= $plaintext;
+        }
+
+        fclose($encryptedFile);
+
+        return $decryptedContent;
     }
-
+    
 }
